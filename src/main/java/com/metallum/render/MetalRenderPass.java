@@ -359,14 +359,6 @@ final class MetalRenderPass implements RenderPassBackend {
         return depthTexture == null ? MemorySegment.NULL : ((MetalGpuTextureView) depthTexture).nativeHandle();
     }
 
-    int colorWidth() {
-        return colorTexture.getWidth(0);
-    }
-
-    int colorHeight() {
-        return colorTexture.getHeight(0);
-    }
-
     void materializePendingClear() {
         if (clearColor != null || clearDepth != null) {
             renderEncoder();

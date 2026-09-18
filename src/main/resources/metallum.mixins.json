@@ -8,8 +8,7 @@
     "render.PreferredGraphicsApiMixin",
     "sodium.DrawBackendMixin",
     "sodium.DrawContextMixin",
-    "sodium.SodiumPreferredGraphicsApiMixin",
-    "sodium.MetalProbeMixin"
+    "sodium.SodiumPreferredGraphicsApiMixin"
   ],
   "injectors": {
     "defaultRequire": 1
