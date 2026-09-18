@@ -2,6 +2,7 @@ package com.metallum.render;
 
 import com.metallum.mtl.MTLCommandBuffer;
 import com.metallum.mtl.MTLDevice;
+import com.mojang.blaze3d.textures.GpuTexture;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import org.jspecify.annotations.Nullable;
@@ -200,6 +201,22 @@ public final class MetalInterop {
                         viewportHeight)
                 .handle()
                 .address();
+    }
+
+    /**
+     * The raw {@code id<MTLTexture>} behind a Blaze3D {@link GpuTexture}, or {@code 0} if the
+     * texture belongs to another backend.
+     *
+     * <p>This is what lets a foreign renderer sample Minecraft's own textures — the block atlas,
+     * most importantly — without a round trip through another API. Under whole-frame Metal those
+     * textures are already on this device, so the handle is directly samplable in a foreign pass;
+     * the alternative is reading the pixels back and re-uploading them, which is what the GL-metal
+     * hybrid had to do and why it needed a staging buffer at all.
+     *
+     * <p>Returned as a raw handle. Valid only while the texture is open.
+     */
+    public static long textureHandle(final GpuTexture texture) {
+        return texture instanceof MetalGpuTexture metal ? metal.nativeHandle().address() : 0L;
     }
 
     /**
