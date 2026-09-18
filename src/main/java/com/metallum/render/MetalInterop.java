@@ -140,4 +140,29 @@ public final class MetalInterop {
             device.createCommandEncoder().endEncoder();
         }
     }
+
+    /**
+     * Submits and waits on the frame's current command buffer, then lets the next
+     * {@link #currentCommandBufferHandle()} start a fresh one. The frame therefore spans more than
+     * one GPU submission.
+     *
+     * <p>This exists because a foreign renderer may need GPU-written data back on the CPU partway
+     * through a frame — Voxy's draw path reads its GPU-generated draw commands to push
+     * {@code baseInstance}, which Metal's indirect draw path does not propagate. Without a
+     * mid-frame completion point those reads cannot be satisfied, and Voxy cannot encode into this
+     * frame at all. Before this, Voxy either committed its own buffer (defeating the shared frame)
+     * or used an IOSurface bridge to composite afterwards.
+     *
+     * <p>Costs a pipeline drain at the split, which is what such a renderer pays today anyway when
+     * submitting its own frames. Callers should split as rarely as possible.
+     *
+     * <p>Must be called on the render thread, between encoders — either call
+     * {@link #endCurrentEncoder()} first, or let this close the current passes itself.
+     */
+    public static void flushFrame() {
+        MetalDevice device = activeDevice;
+        if (device != null) {
+            device.createCommandEncoder().submit();
+        }
+    }
 }
