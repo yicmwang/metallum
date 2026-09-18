@@ -134,6 +134,21 @@ public final class MetalInterop {
      * open its own. Metallum reopens its render encoder lazily on the next draw, on the same
      * attachments, with load actions that preserve what the foreign renderer wrote.
      */
+    /** Temporary diagnostics for the attachment-binding investigation. */
+    public static int createRenderPassCalls() {
+        MetalDevice device = activeDevice;
+        return device == null ? -1 : MetalCommandEncoder.createRenderPassCalls;
+    }
+
+    public static void logRenderPassCounters() {
+        if (MetalCommandEncoder.createRenderPassLogged++ % 240 == 0) {
+            com.metallum.Metallum.LOGGER.info(
+                    "[metallum-diag] createRenderPass={} renderCommandEncoder={}",
+                    MetalCommandEncoder.createRenderPassCalls,
+                    MetalCommandEncoder.renderCommandEncoderCalls);
+        }
+    }
+
     public static void endCurrentEncoder() {
         MetalDevice device = activeDevice;
         if (device != null) {

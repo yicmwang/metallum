@@ -169,8 +169,11 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
             commandBuffer = null;
         }
         currentSubmitIndex++;
-        lastRenderColorAttachment = MemorySegment.NULL;
-        lastRenderDepthAttachment = MemorySegment.NULL;
+        // NOTE: deliberately NOT clearing lastRender*Attachment here. A foreign renderer may split
+        // the frame mid-flight (Voxy calls flushFrame() to make its GPU-written draw commands
+        // CPU-visible); submit() then runs before that renderer's pass, and clearing here made the
+        // attachments look unbound exactly when they were needed. They are overwritten whenever a
+        // new render encoder opens, which is the real signal that the old pass is done.
 
         if (!awaitSubmitCompletion(currentSubmitIndex - MAX_SUBMITS_IN_FLIGHT, 5000L)) {
             throw new IllegalStateException("5s timeout reached when waiting for Metal submit completion");
@@ -225,6 +228,7 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         renderDepthAttachment = depthAttachment;
         lastRenderColorAttachment = colorAttachment;
         lastRenderDepthAttachment = depthAttachment;
+        renderCommandEncoderCalls++;
         return encoder;
     }
 
@@ -269,8 +273,14 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         }
     }
 
+    /** Temporarily instrumented: is the Blaze3D render-pass path ever entered at all? */
+    static int createRenderPassCalls;
+    static int renderCommandEncoderCalls;
+    static int createRenderPassLogged;
+
     @Override
     public @NonNull RenderPassBackend createRenderPass(final RenderPassDescriptor descriptor) {
+        createRenderPassCalls++;
         RenderPassDescriptor.Attachment<Optional<Vector4fc>> colorAttachment = descriptor.colorAttachments().getFirst();
         GpuTextureView colorTexture = colorAttachment.textureView();
         MetalGpuTexture colorTex = (MetalGpuTexture) colorTexture.texture();
