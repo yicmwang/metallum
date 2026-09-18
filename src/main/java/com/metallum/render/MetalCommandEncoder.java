@@ -111,12 +111,17 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         return renderDepthAttachment;
     }
 
+    // Dimensions are read from the colour attachment itself rather than the active render pass:
+    // Sodium draws its terrain layers without going through createRenderPass(), so currentRenderPass
+    // is not a reliable source while a pass is live.
     int currentWidth() {
-        return currentRenderPass == null ? 0 : currentRenderPass.colorWidth();
+        MemorySegment color = currentColorAttachment();
+        return ObjC.isNil(color) ? 0 : Math.toIntExact(MTLTexture.width(color));
     }
 
     int currentHeight() {
-        return currentRenderPass == null ? 0 : currentRenderPass.colorHeight();
+        MemorySegment color = currentColorAttachment();
+        return ObjC.isNil(color) ? 0 : Math.toIntExact(MTLTexture.height(color));
     }
 
     /**

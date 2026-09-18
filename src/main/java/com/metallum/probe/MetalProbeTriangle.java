@@ -47,7 +47,7 @@ public final class MetalProbeTriangle {
     private static @Nullable MemorySegment pipeline;
     private static @Nullable MemorySegment depthState;
     private static int drawn;
-    private static int skipped;
+    private static int calls;
 
     private MetalProbeTriangle() {
     }
@@ -56,12 +56,20 @@ public final class MetalProbeTriangle {
         if (!ENABLED || !MetalInterop.isAvailable()) {
             return;
         }
+        calls++;
+        boolean verbose = calls <= 5 || calls % 120 == 0;
+
         // Only draw once Metallum already has an encoder open for this pass: otherwise the pass's
         // pending clear has not been materialised and would wipe what we draw.
-        if (MetalInterop.currentRenderEncoderHandle() == 0L) {
-            if (skipped++ % 600 == 0) {
-                Metallum.LOGGER.info("[metallum-probe] no open render encoder yet; skipping");
-            }
+        long encoderHandle = MetalInterop.currentRenderEncoderHandle();
+        if (verbose) {
+            Metallum.LOGGER.info("[metallum-probe] call#{} label={} encoder=0x{} color=0x{} depth=0x{} {}x{}",
+                    calls, label, Long.toHexString(encoderHandle),
+                    Long.toHexString(MetalInterop.currentColorAttachmentHandle()),
+                    Long.toHexString(MetalInterop.currentDepthAttachmentHandle()),
+                    MetalInterop.currentViewportWidth(), MetalInterop.currentViewportHeight());
+        }
+        if (encoderHandle == 0L) {
             return;
         }
 
