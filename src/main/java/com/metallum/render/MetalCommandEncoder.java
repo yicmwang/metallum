@@ -92,14 +92,39 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         renderDepthAttachment = MemorySegment.NULL;
     }
 
-    /** Colour attachment of the currently open render pass, or {@code MemorySegment.NULL}. */
+    /**
+     * Colour attachment of the active render pass, or {@code MemorySegment.NULL}. Prefers the pass
+     * description so the handle is available even before the pass's encoder has been opened.
+     */
     MemorySegment currentColorAttachment() {
+        if (currentRenderPass != null) {
+            return currentRenderPass.colorAttachmentHandle();
+        }
         return renderColorAttachment;
     }
 
-    /** Depth/stencil attachment of the currently open render pass, or {@code MemorySegment.NULL}. */
+    /** Depth/stencil attachment of the active render pass, or {@code MemorySegment.NULL}. */
     MemorySegment currentDepthAttachment() {
+        if (currentRenderPass != null) {
+            return currentRenderPass.depthAttachmentHandle();
+        }
         return renderDepthAttachment;
+    }
+
+    int currentWidth() {
+        return currentRenderPass == null ? 0 : currentRenderPass.colorWidth();
+    }
+
+    int currentHeight() {
+        return currentRenderPass == null ? 0 : currentRenderPass.colorHeight();
+    }
+
+    /**
+     * The currently open {@code MTLRenderCommandEncoder}, or {@code MemorySegment.NULL} if none is
+     * open (no draw has been issued yet, or the encoder was just ended).
+     */
+    MemorySegment currentRenderEncoder() {
+        return currentEncoder instanceof MTLRenderCommandEncoder encoder ? encoder.handle() : MemorySegment.NULL;
     }
 
     @Override

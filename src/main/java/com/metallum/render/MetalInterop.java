@@ -1,7 +1,12 @@
 package com.metallum.render;
 
+import com.metallum.mtl.MTLCommandBuffer;
+import com.metallum.mtl.MTLDevice;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import org.jspecify.annotations.Nullable;
+
+import java.lang.foreign.MemorySegment;
 
 /**
  * Public integration surface for external Metal renderers (e.g. Voxy) that must encode their
@@ -82,6 +87,46 @@ public final class MetalInterop {
     public static long currentDepthAttachmentHandle() {
         MetalDevice device = activeDevice;
         return device == null ? 0L : device.createCommandEncoder().currentDepthAttachment().address();
+    }
+
+    /**
+     * The currently open {@code MTLRenderCommandEncoder}, or {@code 0} if Metallum has none open
+     * (for example before the active render pass has drawn anything). A foreign renderer should
+     * {@link #endCurrentEncoder() end} this before opening its own encoder.
+     */
+    public static long currentRenderEncoderHandle() {
+        MetalDevice device = activeDevice;
+        return device == null ? 0L : device.createCommandEncoder().currentRenderEncoder().address();
+    }
+
+    /** Width of the active render pass's colour attachment, or {@code 0} if no pass is active. */
+    public static int currentViewportWidth() {
+        MetalDevice device = activeDevice;
+        return device == null ? 0 : device.createCommandEncoder().currentWidth();
+    }
+
+    /** Height of the active render pass's colour attachment, or {@code 0} if no pass is active. */
+    public static int currentViewportHeight() {
+        MetalDevice device = activeDevice;
+        return device == null ? 0 : device.createCommandEncoder().currentHeight();
+    }
+
+    /**
+     * The {@code MTLDevice} as a typed wrapper, for consumers that prefer Metallum's {@code mtl}
+     * helpers over raw handles. Returns {@code null} if unavailable.
+     */
+    public static @Nullable MTLDevice mtlDevice() {
+        MetalDevice device = activeDevice;
+        return device == null ? null : device.metalDevice();
+    }
+
+    /**
+     * The current frame's {@code MTLCommandBuffer} as a typed wrapper, creating it on demand.
+     * Returns {@code null} if unavailable.
+     */
+    public static @Nullable MTLCommandBuffer commandBuffer() {
+        MetalDevice device = activeDevice;
+        return device == null ? null : device.createCommandEncoder().commandBuffer();
     }
 
     /**

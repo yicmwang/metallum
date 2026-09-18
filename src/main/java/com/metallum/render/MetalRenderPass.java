@@ -349,6 +349,24 @@ final class MetalRenderPass implements RenderPassBackend {
         return ((MetalGpuTexture) depthTexture.texture()).mtlStencilPixelFormat();
     }
 
+    /** Native handle of this pass's colour attachment (valid even before the encoder is opened). */
+    MemorySegment colorAttachmentHandle() {
+        return ((MetalGpuTextureView) colorTexture).nativeHandle();
+    }
+
+    /** Native handle of this pass's depth/stencil attachment, or {@code MemorySegment.NULL}. */
+    MemorySegment depthAttachmentHandle() {
+        return depthTexture == null ? MemorySegment.NULL : ((MetalGpuTextureView) depthTexture).nativeHandle();
+    }
+
+    int colorWidth() {
+        return colorTexture.getWidth(0);
+    }
+
+    int colorHeight() {
+        return colorTexture.getHeight(0);
+    }
+
     void materializePendingClear() {
         if (clearColor != null || clearDepth != null) {
             renderEncoder();
