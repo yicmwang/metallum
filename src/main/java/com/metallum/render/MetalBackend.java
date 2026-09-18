@@ -69,7 +69,9 @@ public class MetalBackend implements GpuBackend {
         Metallum.LOGGER.info("Metal device: {}", deviceName);
 
         try {
-            return new GpuDevice(new MetalDevice(defaultShaderSource, debugOptions, metalDevice.handle(), metalLayer, deviceName, cocoa), criticalShaderLoader);
+            MetalDevice device = new MetalDevice(defaultShaderSource, debugOptions, metalDevice.handle(), metalLayer, deviceName, cocoa);
+            MetalInterop.publishDevice(device);
+            return new GpuDevice(device, criticalShaderLoader);
         } catch (Throwable throwable) {
             throw new BackendCreationException("Metal device initialization failed: " + throwable.getMessage(), BackendCreationException.Reason.OTHER);
         }

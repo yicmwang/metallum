@@ -92,6 +92,16 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         renderDepthAttachment = MemorySegment.NULL;
     }
 
+    /** Colour attachment of the currently open render pass, or {@code MemorySegment.NULL}. */
+    MemorySegment currentColorAttachment() {
+        return renderColorAttachment;
+    }
+
+    /** Depth/stencil attachment of the currently open render pass, or {@code MemorySegment.NULL}. */
+    MemorySegment currentDepthAttachment() {
+        return renderDepthAttachment;
+    }
+
     @Override
     public @NonNull TransientMemory transientMemory() {
         return transientMemory;
