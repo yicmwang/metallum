@@ -226,8 +226,14 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         currentEncoder = encoder;
         renderColorAttachment = colorAttachment;
         renderDepthAttachment = depthAttachment;
-        lastRenderColorAttachment = colorAttachment;
-        lastRenderDepthAttachment = depthAttachment;
+        // Only remember passes that have BOTH attachments. A foreign renderer joining the frame
+        // depth-tests its geometry against the near scene, so a colour-only pass is useless to it --
+        // and overwriting the record with one is exactly what made the attachments look half-bound
+        // (observed: color resolved, depth 0x0).
+        if (!ObjC.isNil(colorAttachment) && !ObjC.isNil(depthAttachment)) {
+            lastRenderColorAttachment = colorAttachment;
+            lastRenderDepthAttachment = depthAttachment;
+        }
         renderCommandEncoderCalls++;
         return encoder;
     }
@@ -258,8 +264,10 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         currentEncoder = encoder;
         renderColorAttachment = colorHandle;
         renderDepthAttachment = depthHandle;
-        lastRenderColorAttachment = colorHandle;
-        lastRenderDepthAttachment = depthHandle;
+        if (!ObjC.isNil(colorHandle) && !ObjC.isNil(depthHandle)) {
+            lastRenderColorAttachment = colorHandle;
+            lastRenderDepthAttachment = depthHandle;
+        }
         return encoder;
     }
 
