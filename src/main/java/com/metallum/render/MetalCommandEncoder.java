@@ -45,6 +45,16 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
     private MTLCommandEncoder currentEncoder;
     private MemorySegment renderColorAttachment = MemorySegment.NULL;
     private MemorySegment renderDepthAttachment = MemorySegment.NULL;
+    /**
+     * The most recent render pass attachments, remembered across {@link #endEncoder()}.
+     *
+     * <p>Needed because a foreign renderer may blink the render encoder (to blit) and then want to
+     * rejoin the same pass. `renderColorAttachment` is cleared on every endEncoder(), so without this
+     * the attachments look unbound and the foreign renderer has nothing to borrow. Cleared on submit,
+     * so it never leaks across frames.
+     */
+    private MemorySegment lastRenderColorAttachment = MemorySegment.NULL;
+    private MemorySegment lastRenderDepthAttachment = MemorySegment.NULL;
     private final Long2ObjectOpenHashMap<ArrayDeque<MTLBuffer>> dynamicBackingPool = new Long2ObjectOpenHashMap<>();
 
     MetalCommandEncoder(final MetalDevice device) {
@@ -100,7 +110,10 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         if (currentRenderPass != null) {
             return currentRenderPass.colorAttachmentHandle();
         }
-        return renderColorAttachment;
+        if (!ObjC.isNil(renderColorAttachment)) {
+            return renderColorAttachment;
+        }
+        return lastRenderColorAttachment;
     }
 
     /** Depth/stencil attachment of the active render pass, or {@code MemorySegment.NULL}. */
@@ -108,7 +121,10 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         if (currentRenderPass != null) {
             return currentRenderPass.depthAttachmentHandle();
         }
-        return renderDepthAttachment;
+        if (!ObjC.isNil(renderDepthAttachment)) {
+            return renderDepthAttachment;
+        }
+        return lastRenderDepthAttachment;
     }
 
     // Dimensions are read from the colour attachment itself rather than the active render pass:
@@ -153,6 +169,8 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
             commandBuffer = null;
         }
         currentSubmitIndex++;
+        lastRenderColorAttachment = MemorySegment.NULL;
+        lastRenderDepthAttachment = MemorySegment.NULL;
 
         if (!awaitSubmitCompletion(currentSubmitIndex - MAX_SUBMITS_IN_FLIGHT, 5000L)) {
             throw new IllegalStateException("5s timeout reached when waiting for Metal submit completion");
@@ -205,7 +223,50 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         currentEncoder = encoder;
         renderColorAttachment = colorAttachment;
         renderDepthAttachment = depthAttachment;
+        lastRenderColorAttachment = colorAttachment;
+        lastRenderDepthAttachment = depthAttachment;
         return encoder;
+    }
+
+    /**
+     * Returns a render encoder for the given raw attachment handles, <b>reusing the open one</b> when
+     * the attachments match. This is how a foreign renderer shares Metallum's pass rather than asking
+     * Metal for a second encoder on the same command buffer, which is illegal.
+     *
+     * <p>Load actions are LOAD: the attachments already belong to Metallum's pass and its contents
+     * must survive.
+     */
+    MTLRenderCommandEncoder renderCommandEncoderForHandles(
+            final MemorySegment colorHandle,
+            final MemorySegment depthHandle,
+            final int viewportWidth,
+            final int viewportHeight
+    ) {
+        if (currentEncoder instanceof MTLRenderCommandEncoder enc
+                && MetalPipelineSupport.sameHandle(renderColorAttachment, colorHandle)
+                && MetalPipelineSupport.sameHandle(renderDepthAttachment, depthHandle)) {
+            return enc;
+        }
+        endEncoder();
+        MTLRenderCommandEncoder encoder = commandBuffer().makeRenderCommandEncoder(
+                colorHandle, null, depthHandle, null, viewportWidth, viewportHeight);
+        encoder.waitForFence(fence, MTLRenderStages.VertexAndFragment);
+        currentEncoder = encoder;
+        renderColorAttachment = colorHandle;
+        renderDepthAttachment = depthHandle;
+        lastRenderColorAttachment = colorHandle;
+        lastRenderDepthAttachment = depthHandle;
+        return encoder;
+    }
+
+    /**
+     * Marks Metallum's active render pass state stale, so its next draw rebinds pipeline, vertex
+     * buffers and descriptors. Call after a foreign renderer has drawn on the shared encoder.
+     */
+    void invalidateCurrentRenderPass() {
+        if (currentRenderPass != null) {
+            currentRenderPass.invalidateEncoderState();
+        }
     }
 
     @Override

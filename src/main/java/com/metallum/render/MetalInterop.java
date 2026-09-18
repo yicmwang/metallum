@@ -142,6 +142,44 @@ public final class MetalInterop {
     }
 
     /**
+     * Returns the frame's {@code MTLRenderCommandEncoder} for these colour/depth attachment handles,
+     * <b>creating one only if Metallum does not already have a matching encoder open</b>.
+     *
+     * <p>This is the sharing path: a foreign renderer draws on Metallum's own encoder instead of
+     * asking Metal for a second encoder on the same command buffer, which Metal refuses ("A command
+     * encoder is already encoding to this command buffer"). Use
+     * {@link #invalidateRenderPassState()} when done.
+     *
+     * <p>Returned as a raw handle; 0 if unavailable.
+     */
+    public static long acquireRenderEncoder(final long colorHandle, final long depthHandle,
+                                            final int viewportWidth, final int viewportHeight) {
+        MetalDevice device = activeDevice;
+        if (device == null || colorHandle == 0L) {
+            return 0L;
+        }
+        return device.createCommandEncoder()
+                .renderCommandEncoderForHandles(
+                        MemorySegment.ofAddress(colorHandle),
+                        MemorySegment.ofAddress(depthHandle),
+                        viewportWidth,
+                        viewportHeight)
+                .handle()
+                .address();
+    }
+
+    /**
+     * Marks Metallum's active render pass state stale after a foreign renderer drew on the shared
+     * encoder, so Metallum rebinds pipeline, vertex buffers and descriptors before its next draw.
+     */
+    public static void invalidateRenderPassState() {
+        MetalDevice device = activeDevice;
+        if (device != null) {
+            device.createCommandEncoder().invalidateCurrentRenderPass();
+        }
+    }
+
+    /**
      * Submits and waits on the frame's current command buffer, then lets the next
      * {@link #currentCommandBufferHandle()} start a fresh one. The frame therefore spans more than
      * one GPU submission.
