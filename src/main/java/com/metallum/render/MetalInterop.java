@@ -157,6 +157,25 @@ public final class MetalInterop {
     }
 
     /**
+     * Handle of the encoder Metallum currently has open — render, compute or blit — or {@code 0} if
+     * it has none. Diagnostics only: a foreign renderer that wants to open an encoder of its own
+     * should call {@link #endCurrentEncoder()} rather than testing this.
+     */
+    public static long openEncoderHandle() {
+        MetalDevice device = activeDevice;
+        return device == null ? 0L : device.createCommandEncoder().currentEncoderHandle().address();
+    }
+
+    /**
+     * {@link #endCurrentEncoder()} but reporting the handle of the encoder it closed, or {@code 0}
+     * if none was open. Diagnostics only.
+     */
+    public static long endCurrentEncoderAndReport() {
+        MetalDevice device = activeDevice;
+        return device == null ? 0L : device.createCommandEncoder().endEncoder();
+    }
+
+    /**
      * Returns the frame's {@code MTLRenderCommandEncoder} for these colour/depth attachment handles,
      * <b>creating one only if Metallum does not already have a matching encoder open</b>.
      *

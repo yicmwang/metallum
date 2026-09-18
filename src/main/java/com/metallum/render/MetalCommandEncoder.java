@@ -68,13 +68,26 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         }
     }
 
+    /**
+     * Bring-up tracing for the foreign-renderer encoder-sharing work. Off unless
+     * {@code -Dmetallum.interopTrace=true}; Metal's "already encoding" assertions arrive with no Java
+     * stack, so knowing which buffer was live and when it was committed is the only way to attribute
+     * one.
+     */
+    static final boolean METAL_INTEROP_TRACE = Boolean.getBoolean("metallum.interopTrace");
+
     MTLCommandBuffer commandBuffer() {
         if (commandBuffer != null) {
             return commandBuffer;
         }
-        return commandBuffer = device.commandQueue.makeCommandBuffer(
+        commandBuffer = device.commandQueue.makeCommandBuffer(
                 device.useLabels() ? "Metallum frame " + currentSubmitIndex : null
         );
+        if (METAL_INTEROP_TRACE) {
+            com.metallum.Metallum.LOGGER.info("[metallum-enc] new command buffer 0x{}",
+                    Long.toHexString(commandBuffer.handle().address()));
+        }
+        return commandBuffer;
     }
 
     MTLBlitCommandEncoder blitCommandEncoder() {
@@ -85,8 +98,17 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         return encoder;
     }
 
-    void endEncoder() {
+    /**
+     * Closes the open encoder, if any, and returns its handle ({@code 0} when nothing was open).
+     *
+     * <p>The return value exists purely for diagnostics: Metal's "a command encoder is already
+     * encoding" assertion arrives with no Java stack, so knowing whether a close actually happened —
+     * and which encoder it closed — is the only way to tell a failed close from a second opener.
+     */
+    long endEncoder() {
+        long ended = 0L;
         if (currentEncoder != null) {
+            ended = currentEncoder.handle().address();
             if (currentEncoder instanceof MTLRenderCommandEncoder renderEncoder) {
                 renderEncoder.updateFence(fence, MTLRenderStages.VertexAndFragment);
                 if (currentRenderPass != null) {
@@ -100,6 +122,15 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
         }
         renderColorAttachment = MemorySegment.NULL;
         renderDepthAttachment = MemorySegment.NULL;
+        return ended;
+    }
+
+    /**
+     * Handle of the encoder currently open — render, compute or blit — or {@code MemorySegment.NULL}.
+     * Diagnostics only.
+     */
+    MemorySegment currentEncoderHandle() {
+        return currentEncoder == null ? MemorySegment.NULL : currentEncoder.handle();
     }
 
     /**
@@ -157,6 +188,10 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
     public void submit() {
         InFlight toClose = null;
         if (commandBuffer != null) {
+            if (METAL_INTEROP_TRACE) {
+                com.metallum.Metallum.LOGGER.info("[metallum-enc] submit committing 0x{}",
+                        Long.toHexString(commandBuffer.handle().address()));
+            }
             submitRenderPass();
             endEncoder();
 
