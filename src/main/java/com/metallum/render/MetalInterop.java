@@ -247,6 +247,22 @@ public final class MetalInterop {
         return device == null ? -1 : device.createCommandEncoder().pendingColorClearCount();
     }
 
+    /**
+     * Draw a magenta triangle at the caller's current point in the frame, bypassing this class's
+     * {@code renderCommandEncoderForHandles} bookkeeping: end the open encoder, create one straight
+     * from the command buffer on the given attachments, draw with the depth test off, end it.
+     *
+     * <p>Exists to separate two explanations for a foreign renderer that draws nothing: whether its
+     * own encoder (obtained through {@link #acquireRenderEncoder}) cannot receive draws, or whether
+     * that point in the frame cannot. Diagnostic only.
+     *
+     * @return true if a draw was issued
+     */
+    public static boolean drawProbeStyleTriangle(final long colorTexture, final long depthTexture,
+                                                 final int width, final int height, final String label) {
+        return com.metallum.probe.MetalProbeTriangle.drawForced(colorTexture, depthTexture, width, height, label);
+    }
+
     public static void invalidateRenderPassState() {
         MetalDevice device = activeDevice;
         if (device != null) {

@@ -169,6 +169,105 @@ public final class MetalProbeTriangle {
         return true;
     }
 
+    private static @Nullable MemorySegment forcedPipeline;
+    private static @Nullable MemorySegment forcedDepthState;
+
+    /**
+     * Draw a magenta triangle NOW, at whatever point in the frame the caller has reached, the way
+     * the probe draws: end the open encoder, create a fresh one straight from the command buffer on
+     * the given colour+depth attachments, draw, end it.
+     *
+     * <p>Two deliberate differences from {@link #draw}, both to isolate an encoder-lifecycle bug:
+     * it ignores the "is an encoder open" guard (so it still runs when Metallum's encoder is
+     * closed, which is the state Voxy's LOD pass is in after the mid-frame submit), and it never
+     * touches Metallum's {@code renderCommandEncoderForHandles} bookkeeping -- the encoder is made
+     * directly from the command buffer. Depth testing is disabled so that nothing about depth
+     * conventions can mask the result: the only question is whether a draw at this point in the
+     * frame reaches the framebuffer.
+     *
+     * <p>Handles are passed in rather than read from {@link MetalInterop} because a caller sitting
+     * between passes has them while {@code currentColorAttachmentHandle()} may not.
+     *
+     * @return true if a draw was issued
+     */
+    public static boolean drawForced(final long colorTexture, final long depthTexture,
+                                     final int width, final int height, final String label) {
+        if (!MetalInterop.isAvailable() || colorTexture == 0L || width <= 0 || height <= 0) {
+            return false;
+        }
+        if (!ensureForcedPipeline(colorTexture, depthTexture)) {
+            return false;
+        }
+        MetalInterop.endCurrentEncoder();
+        final MTLCommandBuffer commandBuffer = MetalInterop.commandBuffer();
+        if (commandBuffer == null) {
+            return false;
+        }
+        final MTLRenderCommandEncoder encoder = commandBuffer.makeRenderCommandEncoder(
+                MemorySegment.ofAddress(colorTexture), null,
+                MemorySegment.ofAddress(depthTexture), null,
+                width, height);
+        encoder.setRenderPipelineState(forcedPipeline);
+        if (forcedDepthState != null) {
+            encoder.setDepthStencilState(forcedDepthState);
+        }
+        encoder.setCullMode(MTLCullMode.None);
+        encoder.drawPrimitives(MTLPrimitiveType.Triangle, 0, 3, 1, 0);
+        encoder.endEncoding();
+        if (forcedDrawn++ % 120 == 0) {
+            Metallum.LOGGER.info("[metallum-probe] forced triangle at {}x{} (label={})", width, height, label);
+        }
+        return true;
+    }
+
+    private static int forcedDrawn;
+
+    private static boolean ensureForcedPipeline(final long colorTexture, final long depthTexture) {
+        if (forcedPipeline != null) {
+            return true;
+        }
+        final MTLDevice device = MetalInterop.mtlDevice();
+        if (device == null) {
+            return false;
+        }
+        final MTLPixelFormat colorFormat = pixelFormatOf(MTLTexture.pixelFormat(MemorySegment.ofAddress(colorTexture)));
+        final MTLPixelFormat depthFormat = depthTexture == 0L
+                ? MTLPixelFormat.Invalid
+                : pixelFormatOf(MTLTexture.pixelFormat(MemorySegment.ofAddress(depthTexture)));
+        final MTLPixelFormat stencilFormat = MTLPixelFormat.hasStencil(depthFormat.value)
+                ? depthFormat
+                : MTLPixelFormat.Invalid;
+        final MemorySegment vertexFunction = device.newFunction(msl(0.5), "probe_vertex");
+        final MemorySegment fragmentFunction = device.newFunction(msl(0.5), "probe_fragment");
+        if (ObjC.isNil(vertexFunction) || ObjC.isNil(fragmentFunction)) {
+            Metallum.LOGGER.error("[metallum-probe] forced: MSL compile failed");
+            return false;
+        }
+        try (MTLRenderPipelineDescriptor descriptor = new MTLRenderPipelineDescriptor()) {
+            descriptor.setCompiledFunctions(vertexFunction, fragmentFunction);
+            descriptor.setColorAttachmentFormat(0, colorFormat);
+            descriptor.setDepthStencilFormats(depthFormat, stencilFormat);
+            forcedPipeline = device.newRenderPipelineState(descriptor);
+        }
+        if (ObjC.isNil(forcedPipeline)) {
+            forcedPipeline = null;
+            Metallum.LOGGER.error("[metallum-probe] forced: pipeline creation failed");
+            return false;
+        }
+        try (MTLDepthStencilDescriptor descriptor = MTLDepthStencilDescriptor.create()) {
+            descriptor.depthCompareFunction(MTLCompareFunction.Always);
+            descriptor.depthWriteEnabled(false);
+            forcedDepthState = device.newDepthStencilState(descriptor);
+        }
+        if (ObjC.isNil(forcedDepthState)) {
+            // Not fatal: with no depth-stencil state bound Metal disables the depth test anyway.
+            forcedDepthState = null;
+        }
+        Metallum.LOGGER.info("[metallum-probe] forced pipeline ready: color={} depth={} (depth test off)",
+                colorFormat, depthFormat);
+        return true;
+    }
+
     private static String msl(final double z) {
         return """
                 #include <metal_stdlib>
