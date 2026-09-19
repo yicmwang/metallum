@@ -319,6 +319,36 @@ final class MetalCommandEncoder implements CommandEncoderBackend {
     /** Temporarily instrumented: is the Blaze3D render-pass path ever entered at all? */
     static int createRenderPassCalls;
     static int renderCommandEncoderCalls;
+
+    /**
+     * Is a clear still queued for this texture?
+     *
+     * <p>A foreign renderer that takes an encoder via {@link MetalInterop#acquireRenderEncoder}
+     * bypasses {@link #createRenderPass}, which is where these pending clears are consumed. If one
+     * is still queued for the texture the foreign renderer just drew into, the next
+     * {@code createRenderPass} on that texture applies it and erases those draws. This accessor
+     * exists so that situation can be measured rather than inferred.
+     */
+    boolean hasPendingColorClearFor(final long textureHandle) {
+        return containsHandle(pendingColorClears.keySet(), textureHandle);
+    }
+
+    boolean hasPendingDepthClearFor(final long textureHandle) {
+        return containsHandle(pendingDepthClears.keySet(), textureHandle);
+    }
+
+    int pendingColorClearCount() {
+        return pendingColorClears.size();
+    }
+
+    private static boolean containsHandle(final Iterable<MetalGpuTexture> textures, final long handle) {
+        for (final MetalGpuTexture t : textures) {
+            if (t.nativeHandle().address() == handle) {
+                return true;
+            }
+        }
+        return false;
+    }
     static int createRenderPassLogged;
 
     @Override

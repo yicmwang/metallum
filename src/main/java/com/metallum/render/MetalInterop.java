@@ -223,6 +223,30 @@ public final class MetalInterop {
      * Marks Metallum's active render pass state stale after a foreign renderer drew on the shared
      * encoder, so Metallum rebinds pipeline, vertex buffers and descriptors before its next draw.
      */
+    /**
+     * Whether a clear is still queued for this colour texture, i.e. whether the next
+     * {@code createRenderPass} on it will clear it.
+     *
+     * <p>A foreign renderer drawing through {@link #acquireRenderEncoder} does not consume these,
+     * so anything it draws into that texture can be erased afterwards. Diagnostic only.
+     */
+    public static boolean hasPendingColorClear(final long textureHandle) {
+        MetalDevice device = activeDevice;
+        return device != null && device.createCommandEncoder().hasPendingColorClearFor(textureHandle);
+    }
+
+    /** As {@link #hasPendingColorClear}, for the depth texture. */
+    public static boolean hasPendingDepthClear(final long textureHandle) {
+        MetalDevice device = activeDevice;
+        return device != null && device.createCommandEncoder().hasPendingDepthClearFor(textureHandle);
+    }
+
+    /** Number of queued colour clears, across all textures. Diagnostic only. */
+    public static int pendingColorClearCount() {
+        MetalDevice device = activeDevice;
+        return device == null ? -1 : device.createCommandEncoder().pendingColorClearCount();
+    }
+
     public static void invalidateRenderPassState() {
         MetalDevice device = activeDevice;
         if (device != null) {
