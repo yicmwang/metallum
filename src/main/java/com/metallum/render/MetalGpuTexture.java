@@ -150,6 +150,15 @@ final class MetalGpuTexture extends GpuTexture {
         if ((usage & GpuTexture.USAGE_RENDER_ATTACHMENT) != 0) {
             result |= MTLTextureUsage.RenderTarget.value;
             result |= MTLTextureUsage.ShaderRead.value;
+            // A render attachment may be VIEWED with a different pixel format, and the depth attachment
+            // is why this is here. The frame's depth is Depth32Float; sampling it through a `sampler2D`
+            // becomes MSL `texture2d<float>`, which Metal answers with ZEROS -- it requires `depth2d`.
+            // The way to read it from GLSL is an R32Float view of it, and `newTextureViewWithPixelFormat:`
+            // REFUSES to create a view whose parent lacks this flag -- so without it the frame's depth is
+            // unreadable from a shader no matter what the sampler does. That is what stops Voxy's Hi-Z
+            // occlusion cull from using the frame's own depth and forces it onto a one-frame-stale copy.
+            // Costs nothing for textures nobody views.
+            result |= MTLTextureUsage.PixelFormatView.value;
         }
         return result == 0L ? MTLTextureUsage.ShaderRead.value : result;
     }
